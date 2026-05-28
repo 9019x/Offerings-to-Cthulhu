@@ -38,3 +38,4 @@
 2026-05-28T18:07:43Z | FIRE START | model=claude-opus-4-7
 2026-05-28T18:08:32Z | PHASE 2 SUCCESS — next phase ready | Qt 5.15.16 builds; full depends chain (boost1.74/qt5.15.16/openssl1.0.2u/qrencode) green; bitcoin-qt links & strips; CI run 26590343128 sha=d9ca810 produced cthulhu-offerings-windows-x86_64-qt5 (22.6MB). Phase 3 (OpenSSL 1.0.1k->3.0.x) next. | branch=modernize-depends
 2026-05-28T19:06:31Z | FIRE START | model=claude-opus-4-7
+2026-05-28T19:08:27Z | PHASE 3 | openssl 1.0.2u->3.0.15: new tarball name (openssl-3.0.15.tar.gz), download_path github releases/openssl-3.0.15, sha256 23c666d0...; dropped no-dso (gone in 3.0) -> added no-module + no-tests + no-docs; removed preprocess sed (Makefile.org gone in 3.0); INSTALL_PREFIX -> DESTDIR; build_libs -> build_sw. Expect src/bignum.h breakage on next CI (Phase 4). | branch=modernize-depends

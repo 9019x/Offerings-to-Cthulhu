@@ -37,3 +37,4 @@
 2026-05-28T17:16:03Z | FIX add pre-make LevelDB step to generate build_config.mk (parallel make races on $(shell ./build_detect_platform)) | branch=modernize-depends
 2026-05-28T18:07:43Z | FIRE START | model=claude-opus-4-7
 2026-05-28T18:08:32Z | PHASE 2 SUCCESS — next phase ready | Qt 5.15.16 builds; full depends chain (boost1.74/qt5.15.16/openssl1.0.2u/qrencode) green; bitcoin-qt links & strips; CI run 26590343128 sha=d9ca810 produced cthulhu-offerings-windows-x86_64-qt5 (22.6MB). Phase 3 (OpenSSL 1.0.1k->3.0.x) next. | branch=modernize-depends
+2026-05-28T19:06:31Z | FIRE START | model=claude-opus-4-7

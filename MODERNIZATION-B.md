@@ -41,3 +41,4 @@
 2026-05-28T19:08:27Z | PHASE 3 | openssl 1.0.2u->3.0.15: new tarball name (openssl-3.0.15.tar.gz), download_path github releases/openssl-3.0.15, sha256 23c666d0...; dropped no-dso (gone in 3.0) -> added no-module + no-tests + no-docs; removed preprocess sed (Makefile.org gone in 3.0); INSTALL_PREFIX -> DESTDIR; build_libs -> build_sw. Expect src/bignum.h breakage on next CI (Phase 4). | branch=modernize-depends
 2026-05-28T20:07:00Z | FIRE START | model=opus-4-7
 2026-05-28T20:07:58Z | PHASE 3 | drop invalid 'no-docs' from openssl 3.0.15 config_opts (Unsupported options: no-docs); kept no-zlib/no-shared/no-module/no-tests | branch=modernize-depends
+2026-05-28T21:06:28Z | FIRE START | model=claude-opus-4-7

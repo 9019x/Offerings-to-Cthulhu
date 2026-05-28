@@ -23,11 +23,11 @@ define $(package)_config_cmds
 endef
 
 define $(package)_build_cmds
-  $(MAKE) build_sw
+  $(MAKE) WINDRES=$(host)-windres build_sw
 endef
 
 define $(package)_stage_cmds
-  $(MAKE) DESTDIR=$($(package)_staging_dir) install_sw
+  $(MAKE) WINDRES=$(host)-windres DESTDIR=$($(package)_staging_dir) install_sw
 endef
 
 define $(package)_postprocess_cmds

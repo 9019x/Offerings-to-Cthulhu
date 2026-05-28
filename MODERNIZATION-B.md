@@ -42,3 +42,4 @@
 2026-05-28T20:07:00Z | FIRE START | model=opus-4-7
 2026-05-28T20:07:58Z | PHASE 3 | drop invalid 'no-docs' from openssl 3.0.15 config_opts (Unsupported options: no-docs); kept no-zlib/no-shared/no-module/no-tests | branch=modernize-depends
 2026-05-28T21:06:28Z | FIRE START | model=claude-opus-4-7
+2026-05-28T21:08:04Z | PHASE 3 | openssl 3.0.15: pass WINDRES=$(host)-windres to build_sw + install_sw (bare 'windres' Error 127 — mingw cross needs x86_64-w64-mingw32-windres). funcs.mk doesn't define _windres var; $(host) is in scope at package eval | branch=modernize-depends

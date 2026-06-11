@@ -952,6 +952,21 @@ void PrintExceptionContinue(std::exception* pex, const char* pszThread)
     strMiscWarning = message;
 }
 
+// New installs use the plural "Offerings" data directory, matching the daemon
+// binary (Offeringsd) and config file (Offerings.conf). Older installs used the
+// singular "Offering"; to avoid stranding their chain/wallet data, keep using a
+// pre-existing legacy directory when the plural one is absent and the legacy one
+// holds real node data.
+static boost::filesystem::path PickDataDir(const boost::filesystem::path& preferred,
+                                           const boost::filesystem::path& legacy)
+{
+    namespace fs = boost::filesystem;
+    if (!fs::exists(preferred) && fs::is_directory(legacy) &&
+        (fs::exists(legacy / "Offerings.conf") || fs::exists(legacy / "wallet.dat")))
+        return legacy;
+    return preferred;
+}
+
 boost::filesystem::path GetDefaultDataDir()
 {
     namespace fs = boost::filesystem;
@@ -959,9 +974,11 @@ boost::filesystem::path GetDefaultDataDir()
     // Windows >= Vista: C:\Users\Username\AppData\Roaming\Offerings
     // Mac: ~/Library/Application Support/Offerings
     // Unix: ~/.Offerings
+    // Legacy installs used the singular "Offering"; see PickDataDir().
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Offering";
+    fs::path base = GetSpecialFolderPath(CSIDL_APPDATA);
+    return PickDataDir(base / "Offerings", base / "Offering");
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -973,10 +990,10 @@ boost::filesystem::path GetDefaultDataDir()
     // Mac
     pathRet /= "Library/Application Support";
     TryCreateDirectory(pathRet);
-    return pathRet / "Offering";
+    return PickDataDir(pathRet / "Offerings", pathRet / "Offering");
 #else
     // Unix
-    return pathRet / ".Offering";
+    return PickDataDir(pathRet / ".Offerings", pathRet / ".Offering");
 #endif
 #endif
 }

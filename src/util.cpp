@@ -952,17 +952,35 @@ void PrintExceptionContinue(std::exception* pex, const char* pszThread)
     strMiscWarning = message;
 }
 
+// Signals that a directory is an existing node's data dir. peers.dat / blocks /
+// chainstate are present on every synced node (incl. headless/pruned/no-wallet);
+// wallet.dat and Offerings.conf are additional hints. testnet3/regtest cover
+// net-specific legacy layouts where mainnet files don't sit at the top level.
+static bool DataDirHasNodeData(const boost::filesystem::path& dir)
+{
+    namespace fs = boost::filesystem;
+    if (!fs::is_directory(dir))
+        return false;
+    static const char* markers[] = {
+        "peers.dat", "blocks", "chainstate",
+        "wallet.dat", "Offerings.conf", "testnet3", "regtest",
+    };
+    for (unsigned int i = 0; i < ARRAYLEN(markers); i++)
+        if (fs::exists(dir / markers[i]))
+            return true;
+    return false;
+}
+
 // New installs use the plural "Offerings" data directory, matching the daemon
 // binary (Offeringsd) and config file (Offerings.conf). Older installs used the
-// singular "Offering"; to avoid stranding their chain/wallet data, keep using a
-// pre-existing legacy directory when the plural one is absent and the legacy one
-// holds real node data.
+// singular "Offering"; use the legacy dir only when it holds node data and the
+// preferred plural dir does not. This is idempotent: creating an empty preferred
+// dir (e.g. by the Qt intro or create_directories) does not change the result,
+// so repeated calls during startup stay consistent.
 static boost::filesystem::path PickDataDir(const boost::filesystem::path& preferred,
                                            const boost::filesystem::path& legacy)
 {
-    namespace fs = boost::filesystem;
-    if (!fs::exists(preferred) && fs::is_directory(legacy) &&
-        (fs::exists(legacy / "Offerings.conf") || fs::exists(legacy / "wallet.dat")))
+    if (DataDirHasNodeData(legacy) && !DataDirHasNodeData(preferred))
         return legacy;
     return preferred;
 }

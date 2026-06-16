@@ -1019,7 +1019,7 @@ int CMerkleTx::GetBlocksToMaturity() const
 {
     if (!IsCoinBase())
         return 0;
-    return max(0, (COINBASE_MATURITY+1) - GetDepthInMainChain());
+    return max(0, (GetCoinbaseMaturity(chainActive.Height())+1) - GetDepthInMainChain());
 }
 
 
@@ -1860,6 +1860,14 @@ bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned in
     return CScriptCheck(txFrom, txTo, nIn, flags, nHashType)();
 }
 
+int GetCoinbaseMaturity(int nHeight)
+{
+    int forkHeight = TestNet() ? HARDFORK_COINBASE_MAT_TESTNET_OFF
+                               : HARDFORK_COINBASE_MAT_MAIN_OFF;
+    return (nHeight >= forkHeight) ? COINBASE_MATURITY_HARDENED
+                                   : COINBASE_MATURITY_LEGACY;
+}
+
 bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks)
 {
     if (!tx.IsCoinBase())
@@ -1885,7 +1893,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCach
 
             // If prev is coinbase, check that it's matured
             if (coins.IsCoinBase()) {
-                if (nSpendHeight - coins.nHeight < COINBASE_MATURITY)
+                if (nSpendHeight - coins.nHeight < GetCoinbaseMaturity(nSpendHeight))
                     return state.Invalid(
                         error("CheckInputs() : tried to spend coinbase at depth %d", nSpendHeight - coins.nHeight),
                         REJECT_INVALID, "bad-txns-premature-spend-of-coinbase");

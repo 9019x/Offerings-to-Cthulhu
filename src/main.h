@@ -56,8 +56,13 @@ static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
 static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
 /** The pre-allocation chunk size for rev?????.dat files (since 0.8) */
 static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
-/** Coinbase transaction outputs can only be spent after this number of new blocks (network rule) */
-static const int COINBASE_MATURITY = 10;
+/** Coinbase-spend maturity hardened from legacy 10 → 240 blocks to exceed
+ *  MAX_REORG_DEPTH=100 (pow.h). 240 = 4h at 60s. See issue #32.
+ *  Activation height in pow.h (HARDFORK_COINBASE_MAT_*); selected by
+ *  GetCoinbaseMaturity() below. */
+static const int COINBASE_MATURITY_LEGACY   = 10;
+static const int COINBASE_MATURITY_HARDENED = 240;
+int GetCoinbaseMaturity(int nHeight);
 /** Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp. */
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 /** Maximum number of script-checking threads allowed */

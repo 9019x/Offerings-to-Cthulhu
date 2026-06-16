@@ -55,6 +55,14 @@ static const int     HARDFORK_EMERGENCY_DIFF_MAIN_OFF    = 989898;
 static const int     HARDFORK_EMERGENCY_DIFF_TESTNET_OFF = 200;
 static const int64_t EMERGENCY_DIFFICULTY_GAP            = 60 * 60;  // 3600 s
 
+// COINBASE_MATURITY hardening — bumps coinbase-spend maturity 10 → 240.
+// Activates post-OFFSIG-window (window ends 1,050,666), 4,889 blocks past
+// freeze-end at h=1,050,667. Bundled with #6 rolling-checkpoints at the
+// same height (one upgrade cycle). See issue #32 and #20 (feature-freeze
+// policy that anchored the activation slot).
+static const int     HARDFORK_COINBASE_MAT_MAIN_OFF      = 1055555;
+static const int     HARDFORK_COINBASE_MAT_TESTNET_OFF   = 100;
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

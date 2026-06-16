@@ -238,14 +238,25 @@ public:
         nRPCPort = 18372;
         strDataDir = "testnet3";
 
-        // Modify the testnet genesis block so the timestamp is valid for a later start.
-        genesis.nTime = 1373481000;
-        genesis.nNonce = 905523645;
+        // Testnet uses a more lenient PoW limit than mainnet (>>20 → >>1) so the
+        // genesis block can be re-mined with a small nonce and so a laptop CPU
+        // can keep up with mining during testing. Real difficulty retargeting
+        // (LWMA-3, DigiShield, KGW) still runs once blocks accumulate. See #38.
+        bnProofOfWorkLimit = CBigNum(~uint256(0) >> 1);
+
+        // Modified testnet genesis: timestamp re-anchored for a later start,
+        // nBits derived from the new PoW limit, nNonce chosen to satisfy
+        // CheckProofOfWork() under that limit. See #38.
+        genesis.nTime  = 1373481000;
+        genesis.nBits  = bnProofOfWorkLimit.GetCompact();
+        genesis.nNonce = 0;
         hashGenesisBlock = genesis.GetHash();
-        //assert(hashGenesisBlock == uint256("0x00000e5e37c42d6b67d0934399adfb0fa48b59138abb1a8842c88f4ca3d4ec96"));
+        assert(hashGenesisBlock == uint256("0x6f66b770406b4f72c9aae8bd8f60fbc535cc996f683980d2885319ad862fabc9"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
+        vSeeds.push_back(CDNSSeedData("testnet-seed.23skidoo.info",
+                                      "testnet-seed.23skidoo.info"));
 
         base58Prefixes[PUBKEY_ADDRESS] = list_of(119).convert_to_container<std::vector<unsigned char> >();
         base58Prefixes[SCRIPT_ADDRESS] = list_of(199).convert_to_container<std::vector<unsigned char> >();

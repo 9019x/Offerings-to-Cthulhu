@@ -1,18 +1,28 @@
 """
-Minimal Bitcoin Script primitives for OFF qa tests.
+Minimal Bitcoin Script + block primitives for OFF qa tests.
 
 Just enough to:
   - Build redeem scripts byte-by-byte
   - Compute P2SH addresses
   - Round-trip integers as stack push opcodes
+  - Serialize tx / build a block header / compute merkle root
+  - Compute OFF's Quark Hash9 PoW via the local helper binary
 
-Avoids any external dependency. Pure stdlib (hashlib, struct).
+Avoids any external dependency at import time. Pure stdlib (hashlib,
+struct, subprocess). The Quark Hash9 helper is a small C binary at
+`qa/rpc-tests/quark9_helper/quark9_cli` — it links sphlib from src/ and
+mirrors src/hashblock.h::Hash9 byte-for-byte. Build instructions are in
+quark9_cli.c's header comment; the helper is built by run-time on first
+import if missing (see quark9_hash below).
 
 Network parameters baked for OFF regtest. If used outside regtest,
 pass the right version byte explicitly to p2sh_address().
 """
 
 import hashlib
+import os
+import struct
+import subprocess
 
 # Opcodes (subset we actually use)
 OP_0 = 0x00
@@ -230,7 +240,8 @@ def p2sh_script_pubkey(redeem_script):
 
 # Raw-tx serialization helpers (just enough for spending a single P2SH input)
 
-def _varint(n):
+def varint(n):
+    """Bitcoin compact-size encoding."""
     if n < 0xfd:
         return bytes([n])
     elif n <= 0xffff:
@@ -239,6 +250,10 @@ def _varint(n):
         return b"\xfe" + n.to_bytes(4, 'little')
     else:
         return b"\xff" + n.to_bytes(8, 'little')
+
+
+# Backwards-compat alias — earlier code in this module uses _varint.
+_varint = varint
 
 
 def serialize_outpoint(txid_hex, vout):
@@ -268,3 +283,130 @@ def serialize_tx(version, inputs, outputs, locktime):
         out += o
     out += locktime.to_bytes(4, 'little')
     return out
+
+
+# =====================================================================
+# Block-construction primitives — header, merkle root, block serialization
+# =====================================================================
+
+def tx_hash(tx_bytes):
+    """SHA256d(tx_bytes). Internal (little-endian) byte order, NOT display."""
+    return double_sha256(tx_bytes)
+
+
+def merkle_root(tx_hashes):
+    """Compute a Bitcoin-style merkle root from a list of 32-byte tx hashes
+    (each in internal/LE byte order). Returns 32 bytes, also internal order.
+
+    Classic algorithm: pairwise SHA256d up the tree; on each odd-length
+    row, duplicate the last element. The leaves are SHA256d(tx_bytes); the
+    pairwise combiner is also SHA256d.
+    """
+    if not tx_hashes:
+        raise ValueError("merkle_root: empty tx list")
+    layer = list(tx_hashes)
+    while len(layer) > 1:
+        if len(layer) % 2 == 1:
+            layer.append(layer[-1])  # classic odd-pair duplication
+        nxt = []
+        for i in range(0, len(layer), 2):
+            nxt.append(double_sha256(layer[i] + layer[i + 1]))
+        layer = nxt
+    return layer[0]
+
+
+def block_header_serialize(version, prev_hash, merkle_root_bytes,
+                           time, bits, nonce):
+    """Bitcoin/OFF block header = 80 bytes.
+
+      version (4 LE) | prev_hash (32 LE) | merkle_root (32 LE)
+      time (4 LE) | bits (4 LE) | nonce (4 LE)
+
+    `prev_hash` and `merkle_root_bytes` are in INTERNAL (LE) order. If you
+    have a display-order hex (the kind RPC returns), do bytes.fromhex(h)[::-1]
+    before passing in.
+    """
+    return (struct.pack("<I", version)
+            + prev_hash
+            + merkle_root_bytes
+            + struct.pack("<I", time)
+            + struct.pack("<I", bits)
+            + struct.pack("<I", nonce))
+
+
+def block_serialize(header_bytes, txs):
+    """header (80B) | varint(tx_count) | concatenated tx bytes."""
+    out = header_bytes + varint(len(txs))
+    for t in txs:
+        out += t
+    return out
+
+
+# =====================================================================
+# Quark Hash9 — OFF's proof-of-work hash
+# =====================================================================
+
+_QUARK9_CLI = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "quark9_helper", "quark9_cli")
+
+
+def _ensure_quark9_helper():
+    """Build the Quark9 helper on first use if it's missing."""
+    if os.path.exists(_QUARK9_CLI):
+        return
+    helper_dir = os.path.dirname(_QUARK9_CLI)
+    src_dir = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), "..", "..", "src"))
+    sources = [os.path.join(src_dir, x)
+               for x in ("blake.c", "bmw.c", "groestl.c",
+                         "jh.c", "keccak.c", "skein.c")]
+    cmd = (["gcc", "-O2", "-I" + src_dir, "-o", _QUARK9_CLI,
+            os.path.join(helper_dir, "quark9_cli.c")] + sources)
+    subprocess.check_call(cmd)
+
+
+def quark9_hash(header_bytes):
+    """Return Quark Hash9 of `header_bytes` as 32 bytes (INTERNAL/LE order).
+
+    Matches src/hashblock.h::Hash9 byte-for-byte. The returned bytes are
+    in the same order as `uint256::pn[0..7]` on a little-endian host —
+    i.e. raw memory layout. Reverse them for display-order comparison.
+    """
+    _ensure_quark9_helper()
+    r = subprocess.run([_QUARK9_CLI, header_bytes.hex()],
+                       capture_output=True, check=True)
+    return bytes.fromhex(r.stdout.decode().strip())
+
+
+def bits_to_target(bits):
+    """nBits compact-format -> 256-bit target integer."""
+    exponent = bits >> 24
+    mantissa = bits & 0x007fffff
+    if exponent <= 3:
+        return mantissa >> (8 * (3 - exponent))
+    return mantissa << (8 * (exponent - 3))
+
+
+def hash_meets_target(hash_le_bytes, bits):
+    """Check PoW: interpret hash as 256-bit LE integer, compare to target."""
+    h_int = int.from_bytes(hash_le_bytes, 'little')
+    return h_int <= bits_to_target(bits)
+
+
+def mine_block_header(version, prev_hash, merkle_root_bytes, time, bits,
+                      start_nonce=0, max_nonce=(1 << 32) - 1):
+    """Search for a nonce that satisfies PoW. Returns (nonce, header_bytes).
+    On OFF regtest with bits=0x207fffff the target is essentially 2^255-ish,
+    so the first nonce almost always works.
+    """
+    n = start_nonce
+    while n <= max_nonce:
+        header = block_header_serialize(
+            version, prev_hash, merkle_root_bytes, time, bits, n)
+        h = quark9_hash(header)
+        if hash_meets_target(h, bits):
+            return n, header
+        n += 1
+    raise RuntimeError("no nonce satisfied PoW in [%d, %d]"
+                       % (start_nonce, max_nonce))

@@ -63,6 +63,8 @@ static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
 static const int COINBASE_MATURITY_LEGACY   = 10;
 static const int COINBASE_MATURITY_HARDENED = 240;
 int GetCoinbaseMaturity(int nHeight);
+/** Active BIP66 strict-DER fork height for the current chain. Issue #33. */
+int GetDersigForkHeight();
 /** Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp. */
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 /** Maximum number of script-checking threads allowed */

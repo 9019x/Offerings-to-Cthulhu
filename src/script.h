@@ -42,6 +42,13 @@ enum
     SCRIPT_VERIFY_STRICTENC = (1U << 1), // enforce strict conformance to DER and SEC2 for signatures and pubkeys
     SCRIPT_VERIFY_EVEN_S    = (1U << 2), // enforce even S values in signatures (depends on STRICTENC)
     SCRIPT_VERIFY_NOCACHE   = (1U << 3), // do not store results in signature cache (but do query it)
+    // BIP66 strict-DER signature encoding. Issue #33.
+    // OFF's existing IsCanonicalSignature (script.cpp) already implements
+    // the BIP66 strict-DER parser self-contained, byte-by-byte, no OpenSSL
+    // dependency. DERSIG is kept as a distinct flag bit so block validation
+    // can gate enforcement at the fork height (HARDFORK_DERSIG_* in pow.h)
+    // independently of mempool, which has carried STRICTENC since v1.0.
+    SCRIPT_VERIFY_DERSIG    = (1U << 4),
 };
 
 enum txnouttype

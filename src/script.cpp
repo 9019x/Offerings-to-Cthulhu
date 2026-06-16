@@ -232,7 +232,7 @@ const char* GetOpName(opcodetype opcode)
 }
 
 bool IsCanonicalPubKey(const valtype &vchPubKey, unsigned int flags) {
-    if (!(flags & SCRIPT_VERIFY_STRICTENC))
+    if (!(flags & (SCRIPT_VERIFY_STRICTENC | SCRIPT_VERIFY_DERSIG)))
         return true;
 
     if (vchPubKey.size() < 33)
@@ -250,7 +250,7 @@ bool IsCanonicalPubKey(const valtype &vchPubKey, unsigned int flags) {
 }
 
 bool IsCanonicalSignature(const valtype &vchSig, unsigned int flags) {
-    if (!(flags & SCRIPT_VERIFY_STRICTENC))
+    if (!(flags & (SCRIPT_VERIFY_STRICTENC | SCRIPT_VERIFY_DERSIG)))
         return true;
 
     // See https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623

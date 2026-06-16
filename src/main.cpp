@@ -1870,6 +1870,13 @@ int GetCoinbaseMaturity(int nHeight)
                                    : COINBASE_MATURITY_LEGACY;
 }
 
+int GetDersigForkHeight()
+{
+    if      (RegTest()) return HARDFORK_DERSIG_REGTEST_OFF;
+    else if (TestNet()) return HARDFORK_DERSIG_TESTNET_OFF;
+    else                return HARDFORK_DERSIG_MAIN_OFF;
+}
+
 bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks)
 {
     if (!tx.IsCoinBase())
@@ -2129,6 +2136,14 @@ bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, C
 
     unsigned int flags = SCRIPT_VERIFY_NOCACHE |
                          (fStrictPayToScriptHash ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE);
+    // BIP66 strict-DER at block validation (issue #33). Mempool has long
+    // carried SCRIPT_VERIFY_STRICTENC; from the fork height onward, the
+    // same encoding rule applies to blocks too. DERSIG fires the same
+    // IsCanonicalSignature path (see script.cpp); we also set STRICTENC
+    // so the existing helper's flag-check accepts either bit.
+    if (pindex->nHeight >= GetDersigForkHeight()) {
+        flags |= SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_STRICTENC;
+    }
 
     CBlockUndo blockundo;
 

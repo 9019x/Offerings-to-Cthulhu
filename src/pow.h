@@ -64,6 +64,15 @@ static const int     HARDFORK_COINBASE_MAT_MAIN_OFF      = 1055555;
 static const int     HARDFORK_COINBASE_MAT_TESTNET_OFF   = 100;
 static const int     HARDFORK_COINBASE_MAT_REGTEST_OFF   = 110;
 
+// BIP66 strict-DER signature enforcement at block validation. See issue #33.
+// Mempool has carried STRICTENC since v1.0; this gate brings ConnectBlock
+// up to the same standard so a miner who patches their daemon to skip
+// mempool relay can't smuggle a non-strict-DER signature into a block.
+// Bundled with COINBASE_MATURITY (#32) and BIP65 CLTV (#34) at h=1,055,555.
+static const int     HARDFORK_DERSIG_MAIN_OFF            = 1055555;
+static const int     HARDFORK_DERSIG_TESTNET_OFF         = 100;
+static const int     HARDFORK_DERSIG_REGTEST_OFF         = 110;
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

@@ -6,7 +6,7 @@ End-to-end exercise of the CLTV opcode body via a real P2SH-CLTV output:
 
   redeem script = <required_locktime> OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG
 
-Two phases, both must PASS:
+Three phases, all must PASS:
 
   1. PRE-FORK accept (h < HARDFORK_CLTV_REGTEST_OFF=110):
      Spend a P2SH-CLTV UTXO with tx.nLockTime == required_locktime.
@@ -17,22 +17,14 @@ Two phases, both must PASS:
      and nSequence != SEQUENCE_FINAL. CLTV check passes; spend
      succeeds, tx lands in a block.
 
-Phase 2 passing is the killer evidence — under the new flag-gate, the
-entire CLTV opcode body had to evaluate correctly for the tx to make it
-into a block: 5-byte locktime decode, lock-type match against
-tx.nLockTime, locktime comparison, nSequence != SEQUENCE_FINAL check.
-A bug in any of those would have caused block-validation to reject the
-tx and Phase 2 to fail.
+  3. POST-FORK reject (h >= 110, invalid spend):
+     Spend a P2SH-CLTV UTXO with tx.nLockTime < required_locktime.
+     Mempool accepts (CLTV not enforced at mempool, by design).
+     Miner pre-screens with block-validation flags (issue #39 fix)
+     and excludes the tx. The next mined block must NOT contain it.
 
-DEFERRED — POST-FORK reject test:
-  A negative test (spend with tx.nLockTime < required) was attempted
-  but revealed an unrelated daemon issue: when a mempool tx becomes
-  invalid under stricter block-validation flags post-fork, the miner's
-  CreateNewBlock path errors out instead of gracefully excluding the
-  tx. The bad-CLTV tx is accepted to mempool (mempool flags don't
-  include CLTV, by design), then setgenerate fails. This is a real
-  issue in the miner's handling of stricter-than-mempool flags, not a
-  flaw in the CLTV opcode body itself. Tracking separately.
+Phase 3 doubles as the regression test for #39: without the miner-side
+fix, setgenerate crashes when the CLTV-violating tx is in the mempool.
 """
 
 import json, os, sys, shutil, subprocess, tempfile, time, atexit
@@ -283,14 +275,44 @@ def main():
         % (spend_txid, block_hash))
     print("  PASS  post-fork valid CLTV spend landed in block %d" % post_h)
 
+    # === PHASE 3: post-fork, INVALID CLTV (regression for #39) ===
     print()
-    print("=== POSITIVE CLTV BOUNDARY CHECKS PASSED ===")
+    print("Phase 3: POST-FORK invalid — bad-CLTV tx kept out of block")
+    funding_txid, vout, value_sat, redeem, spk_hex, sign_addr = fund_p2sh_cltv(REQUIRED_LOCKTIME)
+    print("  funded P2SH-CLTV: %s:%d" % (funding_txid[:16] + "...", vout))
+    dest_addr = cli_raw("getnewaddress")
+    bad_locktime = REQUIRED_LOCKTIME - 1  # CLTV-violating
+    signed_hex = build_and_sign_spend(
+        funding_txid, vout, value_sat, dest_addr, redeem,
+        locktime=bad_locktime, sequence=0,
+        scriptPubKey_hex=spk_hex, signing_addr=sign_addr)
+    rc, out = cli_try("sendrawtransaction", signed_hex)
+    if rc == 0:
+        bad_spend_txid = out
+        print("  mempool accepted bad-CLTV tx (expected; mempool doesn't gate CLTV)")
+        print("  bad_spend_txid=%s..." % bad_spend_txid[:16])
+        pre_h = cli("getblockcount")
+        cli_silent("setgenerate", "true", "1")
+        post_h = cli("getblockcount")
+        assert post_h > pre_h, (
+            "setgenerate failed to land a block (#39 not fixed?): "
+            "pre=%d post=%d" % (pre_h, post_h))
+        block_hash = cli_raw("getblockhash", str(post_h))
+        block = cli_json("getblock", block_hash)
+        assert bad_spend_txid not in block["tx"], (
+            "post-fork INVALID spend %s landed in block %s — "
+            "block-validation should have rejected it"
+            % (bad_spend_txid, block_hash))
+        print("  PASS  bad-CLTV tx kept out of block %d by miner pre-screen (#39)"
+              % post_h)
+    else:
+        # Mempool itself rejected — also acceptable (the rule fires
+        # somewhere; the tx never lands in any block either way).
+        print("  sendrawtransaction rejected at mempool with: %s" % out[:200])
+        print("  PASS  bad-CLTV tx never reached a block")
+
     print()
-    print("Negative case (tx.nLockTime < required, expected REJECTED) is")
-    print("deferred — uncovered an unrelated miner-side issue: when a tx")
-    print("becomes invalid under stricter block-validation flags post-fork,")
-    print("CreateNewBlock errors instead of gracefully excluding it.")
-    print("Tracking separately from the BIP65 patch itself.")
+    print("=== ALL CLTV BOUNDARY CHECKS PASSED ===")
 
 
 if __name__ == "__main__":

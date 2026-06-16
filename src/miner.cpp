@@ -240,6 +240,22 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         TxPriorityCompare comparer(fSortedByFee);
         std::make_heap(vecPriority.begin(), vecPriority.end(), comparer);
 
+        // Pre-screen mempool txs with the same flags ConnectBlock will use
+        // at this height. Without this, a tx that passes mempool's looser
+        // flags (P2SH | STRICTENC) but fails block-validation's stricter
+        // flags (post-fork: + DERSIG + CHECKLOCKTIMEVERIFY) is added to
+        // the candidate block here, then trips the final ConnectBlock
+        // test-pass at the end of this function — which throws and ends
+        // the mining attempt. See issue #39.
+        const int nNextHeight = pindexPrev->nHeight + 1;
+        unsigned int nMinerScriptFlags = SCRIPT_VERIFY_P2SH;
+        if (nNextHeight >= GetDersigForkHeight()) {
+            nMinerScriptFlags |= SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_STRICTENC;
+        }
+        if (nNextHeight >= GetCLTVForkHeight()) {
+            nMinerScriptFlags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
+        }
+
         while (!vecPriority.empty())
         {
             // Take highest priority transaction off the priority queue:
@@ -284,7 +300,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
                 continue;
 
             CValidationState state;
-            if (!CheckInputs(tx, state, view, true, SCRIPT_VERIFY_P2SH))
+            if (!CheckInputs(tx, state, view, true, nMinerScriptFlags))
                 continue;
 
             CTxUndo txundo;

@@ -65,6 +65,8 @@ static const int COINBASE_MATURITY_HARDENED = 240;
 int GetCoinbaseMaturity(int nHeight);
 /** Active BIP66 strict-DER fork height for the current chain. Issue #33. */
 int GetDersigForkHeight();
+/** Active BIP65 OP_CHECKLOCKTIMEVERIFY fork height for the current chain. Issue #34. */
+int GetCLTVForkHeight();
 /** Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp. */
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 /** Maximum number of script-checking threads allowed */

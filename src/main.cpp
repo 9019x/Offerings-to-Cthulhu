@@ -1877,6 +1877,13 @@ int GetDersigForkHeight()
     else                return HARDFORK_DERSIG_MAIN_OFF;
 }
 
+int GetCLTVForkHeight()
+{
+    if      (RegTest()) return HARDFORK_CLTV_REGTEST_OFF;
+    else if (TestNet()) return HARDFORK_CLTV_TESTNET_OFF;
+    else                return HARDFORK_CLTV_MAIN_OFF;
+}
+
 bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks)
 {
     if (!tx.IsCoinBase())
@@ -2143,6 +2150,12 @@ bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, C
     // so the existing helper's flag-check accepts either bit.
     if (pindex->nHeight >= GetDersigForkHeight()) {
         flags |= SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_STRICTENC;
+    }
+    // BIP65 OP_CHECKLOCKTIMEVERIFY at block validation (issue #34).
+    // Soft-fork: redefines OP_NOP2. Pre-fork blocks remain valid;
+    // post-fork blocks must respect script-level locktime if used.
+    if (pindex->nHeight >= GetCLTVForkHeight()) {
+        flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
     }
 
     CBlockUndo blockundo;

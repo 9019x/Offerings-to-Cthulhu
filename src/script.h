@@ -49,6 +49,12 @@ enum
     // can gate enforcement at the fork height (HARDFORK_DERSIG_* in pow.h)
     // independently of mempool, which has carried STRICTENC since v1.0.
     SCRIPT_VERIFY_DERSIG    = (1U << 4),
+    // BIP65 OP_CHECKLOCKTIMEVERIFY. Issue #34.
+    // When set, OP_NOP2 (0xb1) is reinterpreted as OP_CHECKLOCKTIMEVERIFY
+    // — a soft-fork redefinition. Pre-fork and on nodes without this
+    // flag, OP_NOP2 continues to behave as a no-op (forward-compat).
+    // Activation at HARDFORK_CLTV_* in pow.h.
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = (1U << 5),
 };
 
 enum txnouttype
@@ -204,6 +210,7 @@ enum opcodetype
     // expansion
     OP_NOP1 = 0xb0,
     OP_NOP2 = 0xb1,
+    OP_CHECKLOCKTIMEVERIFY = OP_NOP2,  // BIP65 alias; see SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY
     OP_NOP3 = 0xb2,
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,

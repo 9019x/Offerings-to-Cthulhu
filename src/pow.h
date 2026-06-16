@@ -73,6 +73,13 @@ static const int     HARDFORK_DERSIG_MAIN_OFF            = 1055555;
 static const int     HARDFORK_DERSIG_TESTNET_OFF         = 100;
 static const int     HARDFORK_DERSIG_REGTEST_OFF         = 110;
 
+// BIP65 OP_CHECKLOCKTIMEVERIFY. See issue #34. Soft-fork redefinition of
+// OP_NOP2: when the flag is set, OP_NOP2 enforces script-level locktime;
+// otherwise no-op. Bundled with #32 + #33 at h=1,055,555.
+static const int     HARDFORK_CLTV_MAIN_OFF              = 1055555;
+static const int     HARDFORK_CLTV_TESTNET_OFF           = 100;
+static const int     HARDFORK_CLTV_REGTEST_OFF           = 110;
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

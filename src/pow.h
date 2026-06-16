@@ -62,6 +62,7 @@ static const int64_t EMERGENCY_DIFFICULTY_GAP            = 60 * 60;  // 3600 s
 // policy that anchored the activation slot).
 static const int     HARDFORK_COINBASE_MAT_MAIN_OFF      = 1055555;
 static const int     HARDFORK_COINBASE_MAT_TESTNET_OFF   = 100;
+static const int     HARDFORK_COINBASE_MAT_REGTEST_OFF   = 110;
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

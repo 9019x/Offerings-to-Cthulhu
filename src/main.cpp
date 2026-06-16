@@ -1862,8 +1862,10 @@ bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned in
 
 int GetCoinbaseMaturity(int nHeight)
 {
-    int forkHeight = TestNet() ? HARDFORK_COINBASE_MAT_TESTNET_OFF
-                               : HARDFORK_COINBASE_MAT_MAIN_OFF;
+    int forkHeight;
+    if      (RegTest()) forkHeight = HARDFORK_COINBASE_MAT_REGTEST_OFF;
+    else if (TestNet()) forkHeight = HARDFORK_COINBASE_MAT_TESTNET_OFF;
+    else                forkHeight = HARDFORK_COINBASE_MAT_MAIN_OFF;
     return (nHeight >= forkHeight) ? COINBASE_MATURITY_HARDENED
                                    : COINBASE_MATURITY_LEGACY;
 }

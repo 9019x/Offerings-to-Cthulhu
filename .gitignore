@@ -63,6 +63,7 @@ research/github-issue-*.md
 research/bct-*
 research/discord-*
 research/9019x-*
+research/post-canon-*
 
 # Session-handoff state — internal-naming-heavy, keep out of public repo
 WHERE_WE_LEFT_OFF.md

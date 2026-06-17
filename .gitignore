@@ -60,6 +60,8 @@ research/chaos-handoff-*.md
 research/chainstate-backup-record.md
 research/email-*.txt
 research/github-issue-*.md
+research/bct-*
+research/discord-*
 
 # Session-handoff state — internal-naming-heavy, keep out of public repo
 WHERE_WE_LEFT_OFF.md

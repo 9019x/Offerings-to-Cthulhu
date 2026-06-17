@@ -11,10 +11,21 @@ src/Offeringsd
 src/Offerings-cli
 src/Offerings-tx
 src/test/test_offerings
+src/test/test_Offerings
+src/test/test_Offerings.log
+src/test/test_Offerings.trs
+src/test/test-suite.log
+src/test/data/*.json.h
+src/test/data/*.raw.h
 src/qt/offerings-qt
 src/qt/moc_*.cpp
 src/qt/qrc_*.cpp
 src/qt/ui_*.h
+src/qt/*.moc
+src/qt/paymentrequest.pb.cc
+src/qt/paymentrequest.pb.h
+src/qt/locale/*.qm
+src/qt/res/.dirstamp
 
 # Autotools generated
 /Makefile
@@ -64,7 +75,35 @@ src/bitcoin-config.h
 # Local ad-hoc backups (Qt5 rebrand snapshots, .bak.YYYYMMDD, .v1-original.bak, etc.)
 *.bak
 *.bak.[0-9]*
+*.bak-*
 configure.bak.*
+
+# Pre-PR rename-aside snapshots of depends/ trees
+depends/*.pre-*
+
+# Windows cross-compile artifacts (depends/ + locally-built)
+src/Offeringsd.exe
+src/Offerings-cli.exe
+src/qt/Offerings-qt.exe
+
+# Stripped / dated build variants kept locally as insurance
+src/Offeringsd.stripped
+src/Offeringsd.v[0-9]*
+src/qt/Offerings-qt-v[0-9]*
+
+# Qt forms-generated headers + moc output (regenerated each build)
+src/qt/forms/ui_*.h
+src/qt/bitcoin.moc
+
+# depends/ build cache (210M+274M+315M; gitignored, never rebuild from scratch)
+depends/sources/
+depends/work/
+depends/x86_64-unknown-linux-gnu/
+depends/x86_64-w64-mingw32/
+
+# Sensitive: never commit Conclave-key custody material
+research/conclave-key-*
+research/dump-conclave-*
 
 # Portal scripts: generated indexes, staging, and Python bytecode caches
 scripts/indexes/

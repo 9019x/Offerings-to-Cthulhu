@@ -122,6 +122,39 @@ namespace Checkpoints
 
     extern bool fEnabled;
 
+    // Rolling checkpoint auto-rollforward (issue #6, Phase 1).
+    // Activates at HARDFORK_ROLLING_CKPT_<net>_OFF in src/pow.h.
+    // See MaybeRollForward() for the per-block hook.
+    extern bool fRollingEnabled;
+
+    // Returns the rolling-checkpoint activation height for the active
+    // network (mainnet/testnet/regtest). Mirrors LWMA3ForkHeight().
+    int GetRollingCheckpointActivationHeight();
+
+    // Load any persisted rolling entries from
+    // <datadir>/rolling_checkpoints.dat. Idempotent; safe to call once
+    // at startup. Tolerant of a truncated tail record.
+    bool LoadRollingCheckpoints();
+
+    // Append a (height, hash) record to <datadir>/rolling_checkpoints.dat.
+    // Fixed-width 36-byte records (uint32 LE + uint256 hash).
+    bool WriteRollingCheckpoint(int nHeight, const uint256& hash);
+
+    // Per-block entry from ConnectTip. If pindexNew is past activation
+    // height + ROLLING_DEPTH, walks back ROLLING_DEPTH and locks the
+    // ancestor (height, hash) into the runtime rolling map + disk.
+    // No-op below activation height, or when fRollingEnabled is false.
+    void MaybeRollForward(const CBlockIndex* pindexNew);
+
+    // Drops oldest rolling entries until size <= ROLLING_KEEP. Static
+    // entries are never touched. Called internally on every roll-forward.
+    void GCRollingCheckpoints();
+
+    // RPC support — listing, clearing, and the runtime toggle.
+    std::map<int, uint256> GetRollingCheckpoints();
+    bool ClearRollingCheckpointsBelow(int nBelowHeight);
+    void SetRollingEnabled(bool fOn);
+
     // ppcoin: synchronized checkpoint
     extern uint256 hashSyncCheckpoint;
     extern CSyncCheckpoint checkpointMessage;

@@ -80,6 +80,29 @@ static const int     HARDFORK_CLTV_MAIN_OFF              = 1055555;
 static const int     HARDFORK_CLTV_TESTNET_OFF           = 100;
 static const int     HARDFORK_CLTV_REGTEST_OFF           = 110;
 
+// Rolling checkpoint auto-rollforward. See issue #6.
+// Phase 1 — self-rolling persistent finality guard. On every accepted
+// block past activation height, the daemon looks back ROLLING_DEPTH
+// blocks and locks that ancestor (height, hash) into a runtime rolling
+// map that merges with the static mapCheckpoints at every read path.
+// Persisted to <datadir>/rolling_checkpoints.dat across restarts.
+//
+// Depth 1023 (= 2^10 - 1) ≈ 17h at 60s — 10× MAX_REORG_DEPTH, comfortably
+// past plausible legitimate-reorg territory. Carries the chain's 23
+// numerology (23skidoo.info) by intent.
+//
+// ROLLING_KEEP=10000 caps in-memory rolling entries at ~7d. ~360 KB
+// on-disk ceiling. Static entries are never dropped by the GC path.
+//
+// Activation 1,055,555 — one past OFFSIG-window close (1,050,666).
+// Self-rolling never engages while Conclave-only mining is active.
+// Bundled with #32 + #33 + #34 in the same upgrade cycle.
+static const int     HARDFORK_ROLLING_CKPT_MAIN_OFF      = 1055555;
+static const int     HARDFORK_ROLLING_CKPT_TESTNET_OFF   = 100;
+static const int     HARDFORK_ROLLING_CKPT_REGTEST_OFF   = 110;
+static const int     ROLLING_DEPTH                       = 1023;
+static const int     ROLLING_KEEP                        = 10000;
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

@@ -135,18 +135,16 @@ namespace Checkpoints
 
     bool CheckBlock(int nHeight, const uint256& hash)
     {
-        if (!fEnabled)
-            return true;
-
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-
-        MapCheckpoints::const_iterator i = checkpoints.find(nHeight);
-        if (i != checkpoints.end())
-            return hash == i->second;
-
-        // Rolling layer (issue #6). Rolling entries are only written
-        // for heights strictly above max(static), so an in-static hit
-        // always wins; if static had no entry, consult rolling.
+        // The two layers are independently gated: -checkpoints controls
+        // the compile-time static map, -rollingcheckpoints controls the
+        // runtime rolling map. A user who runs -checkpoints=0 to bypass
+        // a stale built-in entry still gets rolling protection if it's on.
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            MapCheckpoints::const_iterator i = checkpoints.find(nHeight);
+            if (i != checkpoints.end())
+                return hash == i->second;
+        }
         if (fRollingEnabled) {
             LOCK(cs_mapCheckpointsRolling);
             MapCheckpoints::const_iterator j = mapCheckpointsRolling.find(nHeight);
@@ -190,12 +188,12 @@ namespace Checkpoints
 
     int GetTotalBlocksEstimate()
     {
-        if (!fEnabled)
-            return 0;
-
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-        int nStaticTop = checkpoints.empty() ? 0 : checkpoints.rbegin()->first;
-
+        int nStaticTop = 0;
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            if (!checkpoints.empty())
+                nStaticTop = checkpoints.rbegin()->first;
+        }
         int nRollingTop = 0;
         if (fRollingEnabled) {
             LOCK(cs_mapCheckpointsRolling);
@@ -207,11 +205,9 @@ namespace Checkpoints
 
     CBlockIndex* GetLastCheckpoint(const std::map<uint256, CBlockIndex*>& mapBlockIndex)
     {
-        if (!fEnabled)
-            return NULL;
-
         // Walk rolling layer first (always above max-static when present),
         // then fall through to the static map. Both in reverse height order.
+        // Each layer gated independently — see CheckBlock for the rationale.
         if (fRollingEnabled) {
             LOCK(cs_mapCheckpointsRolling);
             BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, mapCheckpointsRolling)
@@ -223,13 +219,15 @@ namespace Checkpoints
             }
         }
 
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-        BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
-        {
-            const uint256& hash = i.second;
-            std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
-            if (t != mapBlockIndex.end())
-                return t->second;
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
+            {
+                const uint256& hash = i.second;
+                std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
+                if (t != mapBlockIndex.end())
+                    return t->second;
+            }
         }
         return NULL;
     }
@@ -242,8 +240,12 @@ namespace Checkpoints
             if (!mapCheckpointsRolling.empty())
                 return mapCheckpointsRolling.rbegin()->second;
         }
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-        return (checkpoints.rbegin()->second);
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            if (!checkpoints.empty())
+                return checkpoints.rbegin()->second;
+        }
+        return uint256(0);
     }
 
     // ====================================================================
@@ -341,7 +343,10 @@ namespace Checkpoints
 
     void MaybeRollForward(const CBlockIndex* pindexNew)
     {
-        if (!fEnabled || !fRollingEnabled || pindexNew == NULL)
+        // fEnabled gates the static map only; the rolling layer is
+        // controlled by fRollingEnabled. Writing entries to the rolling
+        // map does not require the static map to be active.
+        if (!fRollingEnabled || pindexNew == NULL)
             return;
 
         int nActivation = GetRollingCheckpointActivationHeight();

@@ -519,7 +519,7 @@ bool AppInit2(boost::thread_group& threadGroup)
     mempool.setSanityCheck(GetBoolArg("-checkmempool", RegTest()));
     Checkpoints::fEnabled = GetBoolArg("-checkpoints", true);
     Checkpoints::fRollingEnabled = GetBoolArg("-rollingcheckpoints", true);
-    if (Checkpoints::fEnabled && Checkpoints::fRollingEnabled)
+    if (Checkpoints::fRollingEnabled)
         Checkpoints::LoadRollingCheckpoints();
 
     // -par=0 means autodetect, but nScriptCheckThreads==0 means no concurrency

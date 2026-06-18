@@ -326,6 +326,9 @@ static const CRPCCommand vRPCCommands[] =
     { "gettxout",               &gettxout,               true,      false,      false },
     { "gettxoutsetinfo",        &gettxoutsetinfo,        true,      false,      false },
     { "verifychain",            &verifychain,            true,      false,      false },
+    { "getrollingcheckpoints",        &getrollingcheckpoints,        true,      false,      false },
+    { "clearrollingcheckpoints",      &clearrollingcheckpoints,      true,      false,      false },
+    { "setrollingcheckpointsenabled", &setrollingcheckpointsenabled, true,      false,      false },
 
     /* Mining */
     { "getblocktemplate",       &getblocktemplate,       true,      false,      false },

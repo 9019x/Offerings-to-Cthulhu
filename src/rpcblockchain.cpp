@@ -7,6 +7,7 @@
 #include "main.h"
 #include "sync.h"
 #include "checkpoints.h"
+#include "pow.h"
 
 #include <stdint.h>
 
@@ -463,5 +464,118 @@ Value getblockchaininfo(const Array& params, bool fHelp)
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
     obj.push_back(Pair("verificationprogress", Checkpoints::GuessVerificationProgress(chainActive.Tip())));
     obj.push_back(Pair("chainwork",     chainActive.Tip()->nChainWork.GetHex()));
+    return obj;
+}
+
+// =======================================================================
+// Rolling-checkpoint RPCs (issue #6, Phase 1)
+// =======================================================================
+
+Value getrollingcheckpoints(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getrollingcheckpoints\n"
+            "\nReturns the runtime rolling-checkpoint entries the daemon\n"
+            "has locked in by watching ROLLING_DEPTH confirmations land\n"
+            "on top of each (issue #6, Phase 1).\n"
+            "\nThis does NOT include compile-time static checkpoints —\n"
+            "those are baked into the binary and never appear here.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"enabled\": true|false,         (bool) runtime toggle state\n"
+            "  \"activation_height\": n,        (numeric) network-aware activation\n"
+            "  \"depth\": n,                    (numeric) confirmation depth before lock\n"
+            "  \"keep\": n,                     (numeric) in-memory ceiling\n"
+            "  \"count\": n,                    (numeric) entries currently held\n"
+            "  \"entries\": [                   (array) heights ascending\n"
+            "    { \"height\": n, \"hash\": \"hex\" },\n"
+            "    ...\n"
+            "  ]\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getrollingcheckpoints", "")
+            + HelpExampleRpc("getrollingcheckpoints", "")
+        );
+
+    std::map<int, uint256> snap = Checkpoints::GetRollingCheckpoints();
+
+    Array entries;
+    for (std::map<int, uint256>::const_iterator i = snap.begin(); i != snap.end(); ++i) {
+        Object e;
+        e.push_back(Pair("height", i->first));
+        e.push_back(Pair("hash",   i->second.GetHex()));
+        entries.push_back(e);
+    }
+
+    Object obj;
+    obj.push_back(Pair("enabled",           Checkpoints::fRollingEnabled));
+    obj.push_back(Pair("activation_height", Checkpoints::GetRollingCheckpointActivationHeight()));
+    obj.push_back(Pair("depth",             (int)ROLLING_DEPTH));
+    obj.push_back(Pair("keep",              (int)ROLLING_KEEP));
+    obj.push_back(Pair("count",             (int)snap.size()));
+    obj.push_back(Pair("entries",           entries));
+    return obj;
+}
+
+Value clearrollingcheckpoints(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "clearrollingcheckpoints below_height\n"
+            "\nDrops every runtime rolling-checkpoint entry strictly below\n"
+            "below_height, both from the in-memory map and from\n"
+            "<datadir>/rolling_checkpoints.dat (rewritten atomically).\n"
+            "\nOps-recovery escape hatch — use if a node has locked in a\n"
+            "bad rolling entry and refuses to accept a block at that height.\n"
+            "Compile-time static checkpoints are never affected.\n"
+            "\nArguments:\n"
+            "1. below_height   (numeric, required) drop entries with height < this\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"cleared_below\": n,    (numeric) the threshold passed in\n"
+            "  \"remaining\": n         (numeric) entries left after clear\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("clearrollingcheckpoints", "1056000")
+            + HelpExampleRpc("clearrollingcheckpoints", "1056000")
+        );
+
+    int nBelow = params[0].get_int();
+    if (!Checkpoints::ClearRollingCheckpointsBelow(nBelow))
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "ClearRollingCheckpointsBelow failed; see debug.log");
+
+    std::map<int, uint256> snap = Checkpoints::GetRollingCheckpoints();
+    Object obj;
+    obj.push_back(Pair("cleared_below", nBelow));
+    obj.push_back(Pair("remaining",     (int)snap.size()));
+    return obj;
+}
+
+Value setrollingcheckpointsenabled(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "setrollingcheckpointsenabled state\n"
+            "\nRuntime toggle for the rolling-checkpoint subsystem. When\n"
+            "false, MaybeRollForward is a no-op and the read paths skip\n"
+            "the rolling map; the in-memory map is preserved across the\n"
+            "toggle. Disabling does NOT delete <datadir>/rolling_checkpoints.dat.\n"
+            "\nArguments:\n"
+            "1. state          (boolean, required) true to enable, false to disable\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"enabled\": true|false  (bool) the new state\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("setrollingcheckpointsenabled", "false")
+            + HelpExampleRpc("setrollingcheckpointsenabled", "false")
+        );
+
+    bool fOn = params[0].get_bool();
+    Checkpoints::SetRollingEnabled(fOn);
+
+    Object obj;
+    obj.push_back(Pair("enabled", Checkpoints::fRollingEnabled));
     return obj;
 }

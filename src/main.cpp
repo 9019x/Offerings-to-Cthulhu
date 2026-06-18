@@ -2470,7 +2470,13 @@ bool ConnectTip(CValidationState &state, CBlockIndex *pindexNew) {
         else
             Checkpoints::strCheckpointWarning = "";
     }
-    
+
+    // Rolling checkpoint auto-rollforward (issue #6, Phase 1).
+    // No-op below activation height + ROLLING_DEPTH or when fRollingEnabled
+    // is false. cs_main is held by us; the rolling map takes its own leaf
+    // lock internally.
+    Checkpoints::MaybeRollForward(pindexNew);
+
     return true;
 }
 

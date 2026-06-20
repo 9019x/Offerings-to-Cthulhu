@@ -29,6 +29,9 @@ BOOST_AUTO_TEST_CASE(netbase_properties)
     BOOST_CHECK(CNetAddr("10.0.0.1").IsRFC1918());
     BOOST_CHECK(CNetAddr("192.168.1.1").IsRFC1918());
     BOOST_CHECK(CNetAddr("172.31.255.255").IsRFC1918());
+    BOOST_CHECK(CNetAddr("100.64.0.0").IsRFC6598());      // first address in /10
+    BOOST_CHECK(CNetAddr("100.100.50.1").IsRFC6598());    // mid-range
+    BOOST_CHECK(CNetAddr("100.127.255.255").IsRFC6598()); // last address in /10
     BOOST_CHECK(CNetAddr("2001:0DB8::").IsRFC3849());
     BOOST_CHECK(CNetAddr("169.254.1.1").IsRFC3927());
     BOOST_CHECK(CNetAddr("2002::1").IsRFC3964());
@@ -42,6 +45,18 @@ BOOST_AUTO_TEST_CASE(netbase_properties)
     BOOST_CHECK(CNetAddr("::1").IsLocal());
     BOOST_CHECK(CNetAddr("8.8.8.8").IsRoutable());
     BOOST_CHECK(CNetAddr("2001::1").IsRoutable());
+
+    // RFC 6598 boundaries: addresses just outside 100.64.0.0/10 must NOT match
+    BOOST_CHECK(!CNetAddr("100.63.255.255").IsRFC6598()); // one below the range
+    BOOST_CHECK(!CNetAddr("100.128.0.0").IsRFC6598());    // one above the range
+
+    // CGNAT shared space is non-routable; ordinary public addresses on either
+    // side of it remain routable.
+    BOOST_CHECK(!CNetAddr("100.64.0.1").IsRoutable());
+    BOOST_CHECK(!CNetAddr("100.127.255.255").IsRoutable());
+    BOOST_CHECK(CNetAddr("100.63.255.255").IsRoutable());
+    BOOST_CHECK(CNetAddr("100.128.0.0").IsRoutable());
+
     BOOST_CHECK(CNetAddr("127.0.0.1").IsValid());
 }
 

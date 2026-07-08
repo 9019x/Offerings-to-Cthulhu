@@ -271,6 +271,7 @@ std::string HelpMessage(HelpMessageMode hmm)
     strUsage += ".\n";
     strUsage += "  -gen                   " + _("Generate coins (default: 0)") + "\n";
     strUsage += "  -genproclimit=<n>      " + _("Set the processor limit for when generation is on (-1 = unlimited, default: -1)") + "\n";
+    strUsage += "  -miningaddress=<addr>  " + _("Pay solo-mining rewards to this fixed Offerings address instead of a fresh keypool key each block. Empty (default) preserves historical per-block-rotation behavior.") + "\n";
     strUsage += "  -help-debug            " + _("Show all debugging options (usage: --help -help-debug)") + "\n";
     strUsage += "  -logtimestamps         " + _("Prepend debug output with timestamp (default: 1)") + "\n";
     if (GetBoolArg("-help-debug", false))

@@ -10,6 +10,7 @@
 #include "init.h"
 
 #include "addrman.h"
+#include "base58.h"
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
@@ -580,6 +581,14 @@ bool AppInit2(boost::thread_group& threadGroup)
     {
         if (!Checkpoints::SetCheckpointPrivKey(GetArg("-checkpointkey", "")))
             return InitError(_("Unable to sign checkpoint, wrong checkpointkey?"));
+    }
+
+    // Fail fast on a typo'd -miningaddress rather than silently falling back
+    // to the per-block wallet key at mine time (miner.cpp only logs).
+    if (mapArgs.count("-miningaddress"))
+    {
+        if (!CBitcoinAddress(mapArgs["-miningaddress"]).IsValid())
+            return InitError(strprintf(_("Invalid Offerings address for -miningaddress=<addr>: '%s'"), mapArgs["-miningaddress"]));
     }
 	
 #ifdef ENABLE_WALLET

@@ -1019,7 +1019,7 @@ int CMerkleTx::GetBlocksToMaturity() const
 {
     if (!IsCoinBase())
         return 0;
-    return max(0, (COINBASE_MATURITY+1) - GetDepthInMainChain());
+    return max(0, (GetCoinbaseMaturity(chainActive.Height())+1) - GetDepthInMainChain());
 }
 
 
@@ -1627,11 +1627,11 @@ unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBl
     if (bnNew > Params().ProofOfWorkLimit())
         bnNew = Params().ProofOfWorkLimit();
 
-    /// debug print
-    LogPrintf("GetNextWorkRequired RETARGET\n");
-    LogPrintf("nTargetTimespan = %d    nActualTimespan = %d\n", nTargetTimespan, nActualTimespan);
-    LogPrintf("Before: %08x  %s\n", pindexLast->nBits, CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString());
-    LogPrintf("After:  %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString());
+    /// debug print (gated behind -debug=pow per issue #43)
+    LogPrint("pow", "GetNextWorkRequired RETARGET\n");
+    LogPrint("pow", "nTargetTimespan = %d    nActualTimespan = %d\n", nTargetTimespan, nActualTimespan);
+    LogPrint("pow", "Before: %08x  %s\n", pindexLast->nBits, CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString());
+    LogPrint("pow", "After:  %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString());
 
     return bnNew.GetCompact();
 }
@@ -1860,6 +1860,30 @@ bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned in
     return CScriptCheck(txFrom, txTo, nIn, flags, nHashType)();
 }
 
+int GetCoinbaseMaturity(int nHeight)
+{
+    int forkHeight;
+    if      (RegTest()) forkHeight = HARDFORK_COINBASE_MAT_REGTEST_OFF;
+    else if (TestNet()) forkHeight = HARDFORK_COINBASE_MAT_TESTNET_OFF;
+    else                forkHeight = HARDFORK_COINBASE_MAT_MAIN_OFF;
+    return (nHeight >= forkHeight) ? COINBASE_MATURITY_HARDENED
+                                   : COINBASE_MATURITY_LEGACY;
+}
+
+int GetDersigForkHeight()
+{
+    if      (RegTest()) return HARDFORK_DERSIG_REGTEST_OFF;
+    else if (TestNet()) return HARDFORK_DERSIG_TESTNET_OFF;
+    else                return HARDFORK_DERSIG_MAIN_OFF;
+}
+
+int GetCLTVForkHeight()
+{
+    if      (RegTest()) return HARDFORK_CLTV_REGTEST_OFF;
+    else if (TestNet()) return HARDFORK_CLTV_TESTNET_OFF;
+    else                return HARDFORK_CLTV_MAIN_OFF;
+}
+
 bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks)
 {
     if (!tx.IsCoinBase())
@@ -1885,7 +1909,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCach
 
             // If prev is coinbase, check that it's matured
             if (coins.IsCoinBase()) {
-                if (nSpendHeight - coins.nHeight < COINBASE_MATURITY)
+                if (nSpendHeight - coins.nHeight < GetCoinbaseMaturity(nSpendHeight))
                     return state.Invalid(
                         error("CheckInputs() : tried to spend coinbase at depth %d", nSpendHeight - coins.nHeight),
                         REJECT_INVALID, "bad-txns-premature-spend-of-coinbase");
@@ -2119,6 +2143,20 @@ bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, C
 
     unsigned int flags = SCRIPT_VERIFY_NOCACHE |
                          (fStrictPayToScriptHash ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE);
+    // BIP66 strict-DER at block validation (issue #33). Mempool has long
+    // carried SCRIPT_VERIFY_STRICTENC; from the fork height onward, the
+    // same encoding rule applies to blocks too. DERSIG fires the same
+    // IsCanonicalSignature path (see script.cpp); we also set STRICTENC
+    // so the existing helper's flag-check accepts either bit.
+    if (pindex->nHeight >= GetDersigForkHeight()) {
+        flags |= SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_STRICTENC;
+    }
+    // BIP65 OP_CHECKLOCKTIMEVERIFY at block validation (issue #34).
+    // Soft-fork: redefines OP_NOP2. Pre-fork blocks remain valid;
+    // post-fork blocks must respect script-level locktime if used.
+    if (pindex->nHeight >= GetCLTVForkHeight()) {
+        flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
+    }
 
     CBlockUndo blockundo;
 
@@ -2432,7 +2470,13 @@ bool ConnectTip(CValidationState &state, CBlockIndex *pindexNew) {
         else
             Checkpoints::strCheckpointWarning = "";
     }
-    
+
+    // Rolling checkpoint auto-rollforward (issue #6, Phase 1).
+    // No-op below activation height + ROLLING_DEPTH or when fRollingEnabled
+    // is false. cs_main is held by us; the rolling map takes its own leaf
+    // lock internally.
+    Checkpoints::MaybeRollForward(pindexNew);
+
     return true;
 }
 

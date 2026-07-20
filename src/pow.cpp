@@ -77,12 +77,12 @@ unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast,
     CBigNum nextTarget = sumTarget * CBigNum(weightedTime);
     if (nextTarget > bnPowLimit) nextTarget = bnPowLimit;
 
-    LogPrintf("GetNextWorkRequired LWMA3 RETARGET  N=%d T=%d weightedTime=%d k=%d\n",
-              (int)N, (int)T, (int)weightedTime, (int)k);
-    LogPrintf("Before: %08x  %s\n", pindexLast->nBits,
-              CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString().c_str());
-    LogPrintf("After:  %08x  %s\n", nextTarget.GetCompact(),
-              nextTarget.getuint256().ToString().c_str());
+    LogPrint("pow", "GetNextWorkRequired LWMA3 RETARGET  N=%d T=%d weightedTime=%d k=%d\n",
+             (int)N, (int)T, (int)weightedTime, (int)k);
+    LogPrint("pow", "Before: %08x  %s\n", pindexLast->nBits,
+             CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString().c_str());
+    LogPrint("pow", "After:  %08x  %s\n", nextTarget.GetCompact(),
+             nextTarget.getuint256().ToString().c_str());
     return nextTarget.GetCompact();
 }
 

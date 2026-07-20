@@ -55,6 +55,54 @@ static const int     HARDFORK_EMERGENCY_DIFF_MAIN_OFF    = 989898;
 static const int     HARDFORK_EMERGENCY_DIFF_TESTNET_OFF = 200;
 static const int64_t EMERGENCY_DIFFICULTY_GAP            = 60 * 60;  // 3600 s
 
+// COINBASE_MATURITY hardening — bumps coinbase-spend maturity 10 → 240.
+// Activates post-OFFSIG-window (window ends 1,050,666), 4,889 blocks past
+// freeze-end at h=1,050,667. Bundled with #6 rolling-checkpoints at the
+// same height (one upgrade cycle). See issue #32 and #20 (feature-freeze
+// policy that anchored the activation slot).
+static const int     HARDFORK_COINBASE_MAT_MAIN_OFF      = 1055555;
+static const int     HARDFORK_COINBASE_MAT_TESTNET_OFF   = 100;
+static const int     HARDFORK_COINBASE_MAT_REGTEST_OFF   = 110;
+
+// BIP66 strict-DER signature enforcement at block validation. See issue #33.
+// Mempool has carried STRICTENC since v1.0; this gate brings ConnectBlock
+// up to the same standard so a miner who patches their daemon to skip
+// mempool relay can't smuggle a non-strict-DER signature into a block.
+// Bundled with COINBASE_MATURITY (#32) and BIP65 CLTV (#34) at h=1,055,555.
+static const int     HARDFORK_DERSIG_MAIN_OFF            = 1055555;
+static const int     HARDFORK_DERSIG_TESTNET_OFF         = 100;
+static const int     HARDFORK_DERSIG_REGTEST_OFF         = 110;
+
+// BIP65 OP_CHECKLOCKTIMEVERIFY. See issue #34. Soft-fork redefinition of
+// OP_NOP2: when the flag is set, OP_NOP2 enforces script-level locktime;
+// otherwise no-op. Bundled with #32 + #33 at h=1,055,555.
+static const int     HARDFORK_CLTV_MAIN_OFF              = 1055555;
+static const int     HARDFORK_CLTV_TESTNET_OFF           = 100;
+static const int     HARDFORK_CLTV_REGTEST_OFF           = 110;
+
+// Rolling checkpoint auto-rollforward. See issue #6.
+// Phase 1 — self-rolling persistent finality guard. On every accepted
+// block past activation height, the daemon looks back ROLLING_DEPTH
+// blocks and locks that ancestor (height, hash) into a runtime rolling
+// map that merges with the static mapCheckpoints at every read path.
+// Persisted to <datadir>/rolling_checkpoints.dat across restarts.
+//
+// Depth 1023 (= 2^10 - 1) ≈ 17h at 60s — 10× MAX_REORG_DEPTH, comfortably
+// past plausible legitimate-reorg territory. Carries the chain's 23
+// numerology (23skidoo.info) by intent.
+//
+// ROLLING_KEEP=10000 caps in-memory rolling entries at ~7d. ~360 KB
+// on-disk ceiling. Static entries are never dropped by the GC path.
+//
+// Activation 1,055,555 — one past OFFSIG-window close (1,050,666).
+// Self-rolling never engages while Conclave-only mining is active.
+// Bundled with #32 + #33 + #34 in the same upgrade cycle.
+static const int     HARDFORK_ROLLING_CKPT_MAIN_OFF      = 1055555;
+static const int     HARDFORK_ROLLING_CKPT_TESTNET_OFF   = 100;
+static const int     HARDFORK_ROLLING_CKPT_REGTEST_OFF   = 110;
+static const int     ROLLING_DEPTH                       = 1023;
+static const int     ROLLING_KEEP                        = 10000;
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_Legacy(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 unsigned int GetNextWorkRequired_LWMA3(const CBlockIndex* pindexLast, const CBlockHeader *pblock);

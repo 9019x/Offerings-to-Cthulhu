@@ -240,6 +240,22 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         TxPriorityCompare comparer(fSortedByFee);
         std::make_heap(vecPriority.begin(), vecPriority.end(), comparer);
 
+        // Pre-screen mempool txs with the same flags ConnectBlock will use
+        // at this height. Without this, a tx that passes mempool's looser
+        // flags (P2SH | STRICTENC) but fails block-validation's stricter
+        // flags (post-fork: + DERSIG + CHECKLOCKTIMEVERIFY) is added to
+        // the candidate block here, then trips the final ConnectBlock
+        // test-pass at the end of this function — which throws and ends
+        // the mining attempt. See issue #39.
+        const int nNextHeight = pindexPrev->nHeight + 1;
+        unsigned int nMinerScriptFlags = SCRIPT_VERIFY_P2SH;
+        if (nNextHeight >= GetDersigForkHeight()) {
+            nMinerScriptFlags |= SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_STRICTENC;
+        }
+        if (nNextHeight >= GetCLTVForkHeight()) {
+            nMinerScriptFlags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
+        }
+
         while (!vecPriority.empty())
         {
             // Take highest priority transaction off the priority queue:
@@ -284,7 +300,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
                 continue;
 
             CValidationState state;
-            if (!CheckInputs(tx, state, view, true, SCRIPT_VERIFY_P2SH))
+            if (!CheckInputs(tx, state, view, true, nMinerScriptFlags))
                 continue;
 
             CTxUndo txundo;
@@ -764,12 +780,17 @@ void static BitcoinMiner(CWallet *pwallet)
     
     CBlockIndex* pindexPrev = NULL;
         
-    if (Params().NetworkID() != CChainParams::REGTEST)
+    if (Params().NetworkID() == CChainParams::MAIN)
     {
         // Wait for peers, but don't block on tip-not-advancing for the Restoration
         // bootstrap: the chain has been stalled since 2015 and there is no upstream
         // miner to break the deadlock. Once peers are present we proceed; the main
         // loop has its own 5-minute stale-tip timeout to avoid wasting cycles.
+        //
+        // Testnet and regtest mine without peers — testnet is for development /
+        // qa exercising, regtest is single-node by definition. The pre-bipsoft
+        // version exempted only regtest; that left a fresh testnet seed node
+        // unable to mine its own first block. See #38.
         pindexPrev = chainActive.Tip();
         while (vNodes.empty())
         {
@@ -777,16 +798,17 @@ void static BitcoinMiner(CWallet *pwallet)
             boost::this_thread::interruption_point();
         }
     }
-    
+
     try { while (true) {
-                    
-        if (Params().NetworkID() != CChainParams::REGTEST)
+
+        if (Params().NetworkID() == CChainParams::MAIN)
         {
             // Restoration bootstrap: the original guard waited on
             // IsInitialBlockDownload() and a 5-minute fresh-tip window. Both are wrong
             // for a chain dead since 2015 sitting BELOW its own hardcoded checkpoint
             // (984023), where IBD never clears and no surviving peer can serve the
             // missing blocks. We only pause while peers feed us a strictly newer tip.
+            // Same testnet/regtest exemption as the initial peer-wait above (#38).
             while ( vNodes.empty() ||
                     (pindexPrev != chainActive.Tip()) )
             {

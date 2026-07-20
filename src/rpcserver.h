@@ -187,6 +187,9 @@ extern json_spirit::Value getblock(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value gettxoutsetinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value gettxout(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value verifychain(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getrollingcheckpoints(const json_spirit::Array& params, bool fHelp);          // in rpcblockchain.cpp
+extern json_spirit::Value clearrollingcheckpoints(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value setrollingcheckpointsenabled(const json_spirit::Array& params, bool fHelp);
 
 extern json_spirit::Value getcheckpoint(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value sendcheckpoint(const json_spirit::Array& params, bool fHelp);

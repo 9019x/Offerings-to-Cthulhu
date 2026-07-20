@@ -11,11 +11,16 @@
 #include "txdb.h"
 #include "base58.h"
 #include "util.h"
+#include "pow.h"
+#include "chainparams.h"
 
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <boost/assign/list_of.hpp> // for 'map_list_of()'
 #include <boost/foreach.hpp>
+#include <boost/filesystem.hpp>
 
 // Phase-2 ACP (issue #40): return hex-encoded primary Conclave pubkey (Slot #0)
 // for the active network from chainparams. Single source of truth — the pre-#40
@@ -47,6 +52,27 @@ namespace Checkpoints
     };
 
     bool fEnabled = true;
+    bool fRollingEnabled = true;
+
+    // Rolling-checkpoint runtime state (issue #6, Phase 1).
+    // Two-map structure: the static mapCheckpoints below is the
+    // compile-time trust layer; mapCheckpointsRolling holds entries
+    // the daemon has locked in itself by watching ROLLING_DEPTH
+    // confirmations land on top of them. Read paths consult both;
+    // the GC path only ever touches the rolling map.
+    static MapCheckpoints mapCheckpointsRolling;
+    static CCriticalSection cs_mapCheckpointsRolling;
+
+    // On-disk format for <datadir>/rolling_checkpoints.dat:
+    //   append-only, fixed-width 36-byte records:
+    //   uint32 height (LE) | uint256 hash (32 bytes)
+    // No header, no version byte. Loader truncates a partial tail.
+    static const size_t ROLLING_RECORD_SIZE = 4 + 32;
+
+    static boost::filesystem::path GetRollingCheckpointsPath()
+    {
+        return GetDataDir() / "rolling_checkpoints.dat";
+    }
 
     // What makes a good checkpoint block?
     // + Is surrounded by blocks with reasonable timestamps
@@ -91,7 +117,7 @@ namespace Checkpoints
 
     static MapCheckpoints mapCheckpointsTestnet =
         boost::assign::map_list_of
-        ( 0, uint256("0x00000e5e37c42d6b67d0934399adfb0fa48b59138abb1a8842c88f4ca3d4ec96"))
+        ( 0, uint256("0x6f66b770406b4f72c9aae8bd8f60fbc535cc996f683980d2885319ad862fabc9"))  // #38 testnet genesis
         ;
     static const CCheckpointData dataTestnet = {
         &mapCheckpointsTestnet,
@@ -122,14 +148,23 @@ namespace Checkpoints
 
     bool CheckBlock(int nHeight, const uint256& hash)
     {
-        if (!fEnabled)
-            return true;
-
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-
-        MapCheckpoints::const_iterator i = checkpoints.find(nHeight);
-        if (i == checkpoints.end()) return true;
-        return hash == i->second;
+        // The two layers are independently gated: -checkpoints controls
+        // the compile-time static map, -rollingcheckpoints controls the
+        // runtime rolling map. A user who runs -checkpoints=0 to bypass
+        // a stale built-in entry still gets rolling protection if it's on.
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            MapCheckpoints::const_iterator i = checkpoints.find(nHeight);
+            if (i != checkpoints.end())
+                return hash == i->second;
+        }
+        if (fRollingEnabled) {
+            LOCK(cs_mapCheckpointsRolling);
+            MapCheckpoints::const_iterator j = mapCheckpointsRolling.find(nHeight);
+            if (j != mapCheckpointsRolling.end())
+                return hash == j->second;
+        }
+        return true;
     }
 
     // Guess how far we are in the verification process at the given block index
@@ -166,27 +201,46 @@ namespace Checkpoints
 
     int GetTotalBlocksEstimate()
     {
-        if (!fEnabled)
-            return 0;
-
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-
-        return checkpoints.rbegin()->first;
+        int nStaticTop = 0;
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            if (!checkpoints.empty())
+                nStaticTop = checkpoints.rbegin()->first;
+        }
+        int nRollingTop = 0;
+        if (fRollingEnabled) {
+            LOCK(cs_mapCheckpointsRolling);
+            if (!mapCheckpointsRolling.empty())
+                nRollingTop = mapCheckpointsRolling.rbegin()->first;
+        }
+        return std::max(nStaticTop, nRollingTop);
     }
 
     CBlockIndex* GetLastCheckpoint(const std::map<uint256, CBlockIndex*>& mapBlockIndex)
     {
-        if (!fEnabled)
-            return NULL;
+        // Walk rolling layer first (always above max-static when present),
+        // then fall through to the static map. Both in reverse height order.
+        // Each layer gated independently — see CheckBlock for the rationale.
+        if (fRollingEnabled) {
+            LOCK(cs_mapCheckpointsRolling);
+            BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, mapCheckpointsRolling)
+            {
+                const uint256& hash = i.second;
+                std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
+                if (t != mapBlockIndex.end())
+                    return t->second;
+            }
+        }
 
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-
-        BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
-        {
-            const uint256& hash = i.second;
-            std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
-            if (t != mapBlockIndex.end())
-                return t->second;
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
+            {
+                const uint256& hash = i.second;
+                std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
+                if (t != mapBlockIndex.end())
+                    return t->second;
+            }
         }
         return NULL;
     }
@@ -194,9 +248,216 @@ namespace Checkpoints
     uint256 GetLatestHardenedCheckpoint()
     {
         LogPrintf("GetLatestHardenedCheckpoint\n");
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-        
-        return (checkpoints.rbegin()->second);
+        if (fRollingEnabled) {
+            LOCK(cs_mapCheckpointsRolling);
+            if (!mapCheckpointsRolling.empty())
+                return mapCheckpointsRolling.rbegin()->second;
+        }
+        if (fEnabled) {
+            const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
+            if (!checkpoints.empty())
+                return checkpoints.rbegin()->second;
+        }
+        return uint256(0);
+    }
+
+    // ====================================================================
+    // Rolling-checkpoint implementation (issue #6, Phase 1)
+    // ====================================================================
+
+    int GetRollingCheckpointActivationHeight()
+    {
+        if (RegTest()) return HARDFORK_ROLLING_CKPT_REGTEST_OFF;
+        if (TestNet()) return HARDFORK_ROLLING_CKPT_TESTNET_OFF;
+        return HARDFORK_ROLLING_CKPT_MAIN_OFF;
+    }
+
+    static int MaxStaticCheckpointHeight()
+    {
+        const MapCheckpoints& s = *Checkpoints().mapCheckpoints;
+        return s.empty() ? 0 : s.rbegin()->first;
+    }
+
+    static void EncodeRollingRecord(int nHeight, const uint256& hash, unsigned char buf[ROLLING_RECORD_SIZE])
+    {
+        uint32_t h = (uint32_t)nHeight;
+        buf[0] = (unsigned char)(h & 0xff);
+        buf[1] = (unsigned char)((h >> 8) & 0xff);
+        buf[2] = (unsigned char)((h >> 16) & 0xff);
+        buf[3] = (unsigned char)((h >> 24) & 0xff);
+        memcpy(buf + 4, hash.begin(), 32);
+    }
+
+    static void DecodeRollingRecord(const unsigned char buf[ROLLING_RECORD_SIZE], int& nHeight, uint256& hash)
+    {
+        uint32_t h = (uint32_t)buf[0]
+                   | ((uint32_t)buf[1] << 8)
+                   | ((uint32_t)buf[2] << 16)
+                   | ((uint32_t)buf[3] << 24);
+        nHeight = (int)h;
+        memcpy(hash.begin(), buf + 4, 32);
+    }
+
+    bool WriteRollingCheckpoint(int nHeight, const uint256& hash)
+    {
+        boost::filesystem::path path = GetRollingCheckpointsPath();
+        FILE* f = fopen(path.string().c_str(), "ab");
+        if (!f)
+            return error("WriteRollingCheckpoint: fopen %s failed", path.string());
+
+        unsigned char buf[ROLLING_RECORD_SIZE];
+        EncodeRollingRecord(nHeight, hash, buf);
+
+        bool fOk = (fwrite(buf, 1, ROLLING_RECORD_SIZE, f) == ROLLING_RECORD_SIZE);
+        fclose(f);
+        if (!fOk)
+            return error("WriteRollingCheckpoint: fwrite failed at h=%d", nHeight);
+        return true;
+    }
+
+    bool LoadRollingCheckpoints()
+    {
+        boost::filesystem::path path = GetRollingCheckpointsPath();
+        if (!boost::filesystem::exists(path))
+            return true; // no file yet — first run past activation
+
+        FILE* f = fopen(path.string().c_str(), "rb");
+        if (!f)
+            return error("LoadRollingCheckpoints: fopen %s failed", path.string());
+
+        int nMaxStatic = MaxStaticCheckpointHeight();
+        unsigned char buf[ROLLING_RECORD_SIZE];
+        size_t nLoaded = 0, nSkipped = 0, nDup = 0;
+
+        {
+            LOCK(cs_mapCheckpointsRolling);
+            while (fread(buf, 1, ROLLING_RECORD_SIZE, f) == ROLLING_RECORD_SIZE) {
+                int nHeight = 0;
+                uint256 hash;
+                DecodeRollingRecord(buf, nHeight, hash);
+
+                if (nHeight <= nMaxStatic) { ++nSkipped; continue; }
+
+                std::pair<MapCheckpoints::iterator, bool> ins =
+                    mapCheckpointsRolling.insert(std::make_pair(nHeight, hash));
+                if (ins.second) ++nLoaded; else ++nDup;
+            }
+
+            // GC under the same lock (in case the file held more than KEEP)
+            while (mapCheckpointsRolling.size() > (size_t)ROLLING_KEEP)
+                mapCheckpointsRolling.erase(mapCheckpointsRolling.begin());
+        }
+        fclose(f);
+
+        LogPrintf("LoadRollingCheckpoints: loaded=%u skipped<=h%d=%u duplicates=%u\n",
+                  (unsigned)nLoaded, nMaxStatic, (unsigned)nSkipped, (unsigned)nDup);
+        return true;
+    }
+
+    void MaybeRollForward(const CBlockIndex* pindexNew)
+    {
+        // fEnabled gates the static map only; the rolling layer is
+        // controlled by fRollingEnabled. Writing entries to the rolling
+        // map does not require the static map to be active.
+        if (!fRollingEnabled || pindexNew == NULL)
+            return;
+
+        int nActivation = GetRollingCheckpointActivationHeight();
+        if (pindexNew->nHeight < nActivation + ROLLING_DEPTH)
+            return;
+
+        int nTarget = pindexNew->nHeight - ROLLING_DEPTH;
+
+        // Walk back to ancestor at nTarget via pprev. cs_main is held
+        // by the caller (ConnectTip), so pprev traversal is safe.
+        const CBlockIndex* p = pindexNew;
+        while (p && p->nHeight > nTarget)
+            p = p->pprev;
+        if (p == NULL || p->nHeight != nTarget) {
+            LogPrint("checkpoints", "MaybeRollForward: ancestor at h=%d unreachable\n", nTarget);
+            return;
+        }
+
+        uint256 hash = p->GetBlockHash();
+        bool fInserted = false;
+        {
+            LOCK(cs_mapCheckpointsRolling);
+            if (mapCheckpointsRolling.count(nTarget))
+                return; // already locked — likely a re-entry on the same tip
+            mapCheckpointsRolling[nTarget] = hash;
+            fInserted = true;
+
+            // GC inline so size stays bounded even under fast tip movement
+            while (mapCheckpointsRolling.size() > (size_t)ROLLING_KEEP)
+                mapCheckpointsRolling.erase(mapCheckpointsRolling.begin());
+        }
+        if (fInserted) {
+            WriteRollingCheckpoint(nTarget, hash);
+            LogPrint("checkpoints", "MaybeRollForward: locked h=%d hash=%s\n",
+                     nTarget, hash.ToString());
+        }
+    }
+
+    void GCRollingCheckpoints()
+    {
+        LOCK(cs_mapCheckpointsRolling);
+        while (mapCheckpointsRolling.size() > (size_t)ROLLING_KEEP)
+            mapCheckpointsRolling.erase(mapCheckpointsRolling.begin());
+    }
+
+    std::map<int, uint256> GetRollingCheckpoints()
+    {
+        LOCK(cs_mapCheckpointsRolling);
+        return mapCheckpointsRolling; // copy
+    }
+
+    bool ClearRollingCheckpointsBelow(int nBelowHeight)
+    {
+        boost::filesystem::path path = GetRollingCheckpointsPath();
+        boost::filesystem::path pathTmp = GetDataDir() /
+            strprintf("rolling_checkpoints.dat.%04x",
+                      (unsigned)(GetRand(0x10000) & 0xffff));
+
+        LOCK(cs_mapCheckpointsRolling);
+
+        // Drop in-memory entries below the threshold
+        for (MapCheckpoints::iterator it = mapCheckpointsRolling.begin();
+             it != mapCheckpointsRolling.end(); )
+        {
+            if (it->first < nBelowHeight) {
+                MapCheckpoints::iterator del = it++;
+                mapCheckpointsRolling.erase(del);
+            } else {
+                ++it;
+            }
+        }
+
+        // Rewrite disk file atomically from the trimmed in-memory state
+        FILE* f = fopen(pathTmp.string().c_str(), "wb");
+        if (!f)
+            return error("ClearRollingCheckpointsBelow: fopen tmp %s failed", pathTmp.string());
+        for (MapCheckpoints::const_iterator i = mapCheckpointsRolling.begin();
+             i != mapCheckpointsRolling.end(); ++i)
+        {
+            unsigned char buf[ROLLING_RECORD_SIZE];
+            EncodeRollingRecord(i->first, i->second, buf);
+            if (fwrite(buf, 1, ROLLING_RECORD_SIZE, f) != ROLLING_RECORD_SIZE) {
+                fclose(f);
+                boost::filesystem::remove(pathTmp);
+                return error("ClearRollingCheckpointsBelow: fwrite failed");
+            }
+        }
+        fclose(f);
+
+        if (!RenameOver(pathTmp, path))
+            return error("ClearRollingCheckpointsBelow: rename %s -> %s failed",
+                         pathTmp.string(), path.string());
+        return true;
+    }
+
+    void SetRollingEnabled(bool fOn)
+    {
+        fRollingEnabled = fOn;
     }
  
     // ppcoin: synchronized checkpoint (centrally broadcasted)
@@ -512,7 +773,7 @@ namespace Checkpoints
         assert(mapBlockIndex.count(hashSyncCheckpoint));
         const CBlockIndex* pindexSync = mapBlockIndex[hashSyncCheckpoint];
         // return (nBestHeight >= pindexSync->nHeight + COINBASE_MATURITY);
-        return (chainActive.Tip()->nHeight >= pindexSync->nHeight + COINBASE_MATURITY);
+        return (chainActive.Tip()->nHeight >= pindexSync->nHeight + GetCoinbaseMaturity(chainActive.Tip()->nHeight));
     }
 
     // Is the sync-checkpoint too old?

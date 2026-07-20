@@ -42,6 +42,19 @@ enum
     SCRIPT_VERIFY_STRICTENC = (1U << 1), // enforce strict conformance to DER and SEC2 for signatures and pubkeys
     SCRIPT_VERIFY_EVEN_S    = (1U << 2), // enforce even S values in signatures (depends on STRICTENC)
     SCRIPT_VERIFY_NOCACHE   = (1U << 3), // do not store results in signature cache (but do query it)
+    // BIP66 strict-DER signature encoding. Issue #33.
+    // OFF's existing IsCanonicalSignature (script.cpp) already implements
+    // the BIP66 strict-DER parser self-contained, byte-by-byte, no OpenSSL
+    // dependency. DERSIG is kept as a distinct flag bit so block validation
+    // can gate enforcement at the fork height (HARDFORK_DERSIG_* in pow.h)
+    // independently of mempool, which has carried STRICTENC since v1.0.
+    SCRIPT_VERIFY_DERSIG    = (1U << 4),
+    // BIP65 OP_CHECKLOCKTIMEVERIFY. Issue #34.
+    // When set, OP_NOP2 (0xb1) is reinterpreted as OP_CHECKLOCKTIMEVERIFY
+    // — a soft-fork redefinition. Pre-fork and on nodes without this
+    // flag, OP_NOP2 continues to behave as a no-op (forward-compat).
+    // Activation at HARDFORK_CLTV_* in pow.h.
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = (1U << 5),
 };
 
 enum txnouttype
@@ -197,6 +210,7 @@ enum opcodetype
     // expansion
     OP_NOP1 = 0xb0,
     OP_NOP2 = 0xb1,
+    OP_CHECKLOCKTIMEVERIFY = OP_NOP2,  // BIP65 alias; see SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY
     OP_NOP3 = 0xb2,
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,

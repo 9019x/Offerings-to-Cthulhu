@@ -12,7 +12,7 @@
 const std::string CLIENT_NAME("Offerings");
 
 // Client version number
-#define CLIENT_VERSION_SUFFIX   "-Restoration"
+#define CLIENT_VERSION_SUFFIX   "-Eldersign"
 
 
 // The following part of the code determines the CLIENT_BUILD variable.

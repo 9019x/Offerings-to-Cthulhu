@@ -101,7 +101,8 @@ def main():
 
     state['last_run'] = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
     STATE.write_text(json.dumps(state))
-    print(f'done. rendered={rendered} budget_used={state["chars_used"]}/{budget} ({month})')
+    pct = (100 * state["chars_used"] / budget) if budget else 0
+    print(f'BUDGET {month} rendered={rendered} used={state["chars_used"]}/{budget} ({pct:.1f}%)')
     return 0
 
 if __name__ == '__main__':

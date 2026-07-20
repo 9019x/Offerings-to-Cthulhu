@@ -254,6 +254,7 @@ std::string HelpMessage(HelpMessageMode hmm)
     {
         strUsage += "  -benchmark             " + _("Show benchmark information (default: 0)") + "\n";
         strUsage += "  -checkpoints           " + _("Only accept block chain matching built-in checkpoints (default: 1)") + "\n";
+        strUsage += "  -rollingcheckpoints    " + _("Maintain self-rolling persistent checkpoints past activation (issue #6) (default: 1)") + "\n";
         strUsage += "  -dblogsize=<n>         " + _("Flush database activity from memory pool to disk log every <n> megabytes (default: 100)") + "\n";
         strUsage += "  -disablesafemode       " + _("Disable safemode, override a real safe mode event (default: 0)") + "\n";
         strUsage += "  -testsafemode          " + _("Force safe mode (default: 0)") + "\n";
@@ -517,6 +518,9 @@ bool AppInit2(boost::thread_group& threadGroup)
     fBenchmark = GetBoolArg("-benchmark", false);
     mempool.setSanityCheck(GetBoolArg("-checkmempool", RegTest()));
     Checkpoints::fEnabled = GetBoolArg("-checkpoints", true);
+    Checkpoints::fRollingEnabled = GetBoolArg("-rollingcheckpoints", true);
+    if (Checkpoints::fRollingEnabled)
+        Checkpoints::LoadRollingCheckpoints();
 
     // -par=0 means autodetect, but nScriptCheckThreads==0 means no concurrency
     nScriptCheckThreads = GetArg("-par", DEFAULT_SCRIPTCHECK_THREADS);

@@ -232,7 +232,7 @@ const char* GetOpName(opcodetype opcode)
 }
 
 bool IsCanonicalPubKey(const valtype &vchPubKey, unsigned int flags) {
-    if (!(flags & SCRIPT_VERIFY_STRICTENC))
+    if (!(flags & (SCRIPT_VERIFY_STRICTENC | SCRIPT_VERIFY_DERSIG)))
         return true;
 
     if (vchPubKey.size() < 33)
@@ -250,7 +250,7 @@ bool IsCanonicalPubKey(const valtype &vchPubKey, unsigned int flags) {
 }
 
 bool IsCanonicalSignature(const valtype &vchSig, unsigned int flags) {
-    if (!(flags & SCRIPT_VERIFY_STRICTENC))
+    if (!(flags & (SCRIPT_VERIFY_STRICTENC | SCRIPT_VERIFY_DERSIG)))
         return true;
 
     // See https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623
@@ -390,8 +390,56 @@ bool EvalScript(vector<vector<unsigned char> >& stack, const CScript& script, co
                 // Control
                 //
                 case OP_NOP:
-                case OP_NOP1: case OP_NOP2: case OP_NOP3: case OP_NOP4: case OP_NOP5:
+                case OP_NOP1:                case OP_NOP3: case OP_NOP4: case OP_NOP5:
                 case OP_NOP6: case OP_NOP7: case OP_NOP8: case OP_NOP9: case OP_NOP10:
+                break;
+
+                case OP_NOP2:  // OP_CHECKLOCKTIMEVERIFY when flag is set. BIP65 / issue #34.
+                {
+                    if (!(flags & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY))
+                        break;  // Pre-fork / no-flag: forward-compat no-op.
+
+                    if (stack.size() < 1)
+                        return false;
+
+                    // Read top stack item as little-endian signed integer (bitcoin
+                    // stack-int convention: top bit of MSB is sign). BIP65 allows
+                    // up to 5 bytes so locktimes remain meaningful past 2038.
+                    const valtype& vchLockTime = stacktop(-1);
+                    if (vchLockTime.size() > 5)
+                        return false;
+                    int64_t nLockTime = 0;
+                    for (size_t i = 0; i < vchLockTime.size(); i++)
+                        nLockTime |= (int64_t)vchLockTime[i] << (8 * i);
+                    if (!vchLockTime.empty() && (vchLockTime.back() & 0x80)) {
+                        nLockTime &= ~((int64_t)0x80 << (8 * (vchLockTime.size() - 1)));
+                        nLockTime = -nLockTime;
+                    }
+                    if (nLockTime < 0)
+                        return false;
+
+                    // Required and tx locktimes must be the same type:
+                    // both block-height (< 500000000) or both block-time (>=).
+                    static const int64_t CLTV_LOCKTIME_THRESHOLD = 500000000;
+                    int64_t txLockTime = (int64_t)txTo.nLockTime;
+                    bool bothBelow = (txLockTime <  CLTV_LOCKTIME_THRESHOLD &&
+                                      nLockTime  <  CLTV_LOCKTIME_THRESHOLD);
+                    bool bothAbove = (txLockTime >= CLTV_LOCKTIME_THRESHOLD &&
+                                      nLockTime  >= CLTV_LOCKTIME_THRESHOLD);
+                    if (!bothBelow && !bothAbove)
+                        return false;
+
+                    // Required locktime must be reached.
+                    if (nLockTime > txLockTime)
+                        return false;
+
+                    // Input's nSequence must not be SEQUENCE_FINAL (0xFFFFFFFF):
+                    // otherwise tx.nLockTime is disabled and the check is vacuous.
+                    if (txTo.vin[nIn].nSequence == 0xFFFFFFFFu)
+                        return false;
+
+                    // Pass: stack unchanged (the locktime arg remains on top).
+                }
                 break;
 
                 case OP_IF:

@@ -722,6 +722,22 @@ int64_t nHPSTimerStart = 0;
 //
 CBlockTemplate* CreateNewBlockWithKey(CReserveKey& reservekey)
 {
+    // Operator override: if -miningaddress=<Qaddr> is set in offerings.conf,
+    // pay the coinbase to that fixed address instead of consuming a wallet
+    // keypool entry per block. Lets solo miners consolidate rewards onto a
+    // single leaderboard row instead of rotating a fresh address each block.
+    // Falls back to the historical CReserveKey path on empty/invalid value.
+    std::string strMiningAddress = GetArg("-miningaddress", "");
+    if (!strMiningAddress.empty()) {
+        CBitcoinAddress addr(strMiningAddress);
+        if (addr.IsValid()) {
+            CScript scriptPubKey;
+            scriptPubKey.SetDestination(addr.Get());
+            return CreateNewBlock(scriptPubKey);
+        }
+        LogPrintf("OfferingsMiner: -miningaddress=%s is not a valid Offerings address; falling back to wallet key\n", strMiningAddress);
+    }
+
     CPubKey pubkey;
     if (!reservekey.GetReservedKey(pubkey))
         return NULL;

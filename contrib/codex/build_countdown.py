@@ -73,7 +73,7 @@ CLI   = "/home/btcbob/claude/offerings-master/src/Offerings-cli"
 FORK  = 1000000
 OFFSIG_END = 1050666
 RECLAMATION_DAYS = 730    # 2-year window
-RELEASE_TAG = "v2.0.8.7"  # current GitHub release; bump in tandem with new tags
+RELEASE_TAG = "v2.0.9-Eldersign"  # current GitHub release; bump in tandem with new tags
 OUT   = "/var/www/23skidoo.info/awakening/index.html"
 CACHE = os.path.join(STATE_DIR, "countdown_cache.json")
 

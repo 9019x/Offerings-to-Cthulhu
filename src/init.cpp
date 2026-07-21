@@ -10,6 +10,7 @@
 #include "init.h"
 
 #include "addrman.h"
+#include "base58.h"
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
@@ -271,6 +272,7 @@ std::string HelpMessage(HelpMessageMode hmm)
     strUsage += ".\n";
     strUsage += "  -gen                   " + _("Generate coins (default: 0)") + "\n";
     strUsage += "  -genproclimit=<n>      " + _("Set the processor limit for when generation is on (-1 = unlimited, default: -1)") + "\n";
+    strUsage += "  -miningaddress=<addr>  " + _("Pay solo-mining rewards to this fixed Offerings address instead of a fresh keypool key each block. Empty (default) preserves historical per-block-rotation behavior.") + "\n";
     strUsage += "  -help-debug            " + _("Show all debugging options (usage: --help -help-debug)") + "\n";
     strUsage += "  -logtimestamps         " + _("Prepend debug output with timestamp (default: 1)") + "\n";
     if (GetBoolArg("-help-debug", false))
@@ -579,6 +581,14 @@ bool AppInit2(boost::thread_group& threadGroup)
     {
         if (!Checkpoints::SetCheckpointPrivKey(GetArg("-checkpointkey", "")))
             return InitError(_("Unable to sign checkpoint, wrong checkpointkey?"));
+    }
+
+    // Fail fast on a typo'd -miningaddress rather than silently falling back
+    // to the per-block wallet key at mine time (miner.cpp only logs).
+    if (mapArgs.count("-miningaddress"))
+    {
+        if (!CBitcoinAddress(mapArgs["-miningaddress"]).IsValid())
+            return InitError(strprintf(_("Invalid Offerings address for -miningaddress=<addr>: '%s'"), mapArgs["-miningaddress"]));
     }
 	
 #ifdef ENABLE_WALLET
